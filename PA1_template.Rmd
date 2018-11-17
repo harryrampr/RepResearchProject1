@@ -1,0 +1,110 @@
+Reproducible Research Project 1
+-------------------------------
+
+#Load Data
+```{r LoadData, echo=TRUE}
+dataFileName <- "./Data/activity.csv"
+# Unzip data if needed
+if (!file.exists(dataFileName)) {
+    dataZipFile <- "./repdata_data_activity.zip"
+    unzip(dataZipFile, exdir = "./Data")
+}
+activities <- read.csv(dataFileName, na.strings = "NA", stringsAsFactors = FALSE)
+```
+#Explore Data
+```{r ExploreData, echo=TRUE}
+str(activities)
+naCount <- sum(is.na(activities$steps))
+daysRecorded <- length(table(activities$date))
+summary(activities$steps)
+```
+The data contains `r naCount` Non-Available steps counts. The total number of 
+days recorded was `r daysRecorded`.
+
+#What is mean total number of steps taken per day?
+```{r Question1, echo=TRUE}
+dailySteps <- tapply(activities$steps, activities$date, sum, na.rm = TRUE)
+hist(dailySteps, main = "Histogram of Steps per Day", xlab = "Steps per Day")
+rug(dailySteps)
+dayMean <- mean(dailySteps)
+dayMedian <- median(dailySteps)
+```
+The mean steps per day is `r format(dayMean, digits=2, nsmall=2)` and the median 
+steps per day is `r format(dayMedian, digits=2, nsmall=2)`.
+
+#What is the average daily activity pattern?
+```{r Question2, echo=TRUE}
+intervalAverageSteps <- tapply(activities$steps, activities$interval, mean, 
+                               na.rm = TRUE)
+plot(names(intervalAverageSteps), intervalAverageSteps, type = "l", 
+     main = "Average Steps Taken", xlab = "5-minute Interval", ylab = "Steps")
+maxAverageInterval <- names(intervalAverageSteps)[which.max(intervalAverageSteps)]
+```
+Inteval `r maxAverageInterval` has the maximum average of steps accross all days.
+
+#Missing Values Analysis
+```{r MissingValues, echo=TRUE}
+rowsWithNAs <- sum(!complete.cases(activities))
+percentNASteps <- round(mean(is.na(activities$steps)) * 100, 3)
+```
+The total number of rows with NAs is `r rowsWithNAs`. The percent of steps counts 
+non-available is `r percentNASteps`.  
+
+####We are going to use the mean for each 5-minute interval to impute non-available steps counts:
+```{r ImputeNAs, echo=TRUE}
+updatedData <- activities
+updatedData$steps <- apply(activities, 1, function(x){
+                                    ifelse(is.na(x["steps"]),
+                                           intervalAverageSteps[trimws(x["interval"])],
+                                           as.numeric(x["steps"]))})
+newRowsWithNAs <- sum(!complete.cases(updatedData))
+```
+There is `r newRowsWithNAs` rows with NAs in updated data.
+  
+##Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.
+```{r NewHist, echo=TRUE, fig.height=4}
+updatedDailySteps <- tapply(updatedData$steps, updatedData$date, sum)
+hist(updatedDailySteps, main = "Histogram of Steps per Day", xlab = "Steps per Day")
+rug(updatedDailySteps)
+```
+<h3>Do these values differ from the estimates from the first part of the 
+assignment? What is the impact of imputing missing data on the estimates of the 
+total daily number of steps?</h3>
+```{r NewStats, echo=TRUE}
+newDayMean <- mean(updatedDailySteps)
+newDayMedian <- median(updatedDailySteps)
+newDayMeanIncrease <- newDayMean - dayMean
+newDdayMedianIncrease <- newDayMedian - dayMedian
+```
+The new mean is `r format(newDayMean, digits=2, nsmall=2)` and increased by 
+`r format(newDayMeanIncrease, digits=2, nsmall=2)`. The new median is 
+`r format(newDayMedian, digits=2, nsmall=2)` and increased by 
+`r format(newDdayMedianIncrease, digits=2, nsmall=2)`. After imputing the 
+non-available values, the data looks less skewed to the left and more normal.
+
+#Are there differences in activity patterns between weekdays and weekends?
+```{r DayOfWeek, echo=TRUE, fig.height=8 }
+weekdaysNames <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+updatedData$WeekDay <- weekdays(as.Date(updatedData$date, format = "%Y-%m-%d")) %in% weekdaysNames
+updatedData$WeekDay <- factor(updatedData$WeekDay, labels = c("weekend", 
+                                                              "weekday"))
+
+weekdaysData <- updatedData[which(updatedData$WeekDay == "weekday"),]
+weekendData <- updatedData[which(updatedData$WeekDay == "weekend"),]
+
+weekdaysIntervalAverageSteps <- tapply(weekdaysData$steps, weekdaysData$interval, 
+                                       mean)
+weekendIntervalAverageSteps <- tapply(weekendData$steps, weekendData$interval, 
+                                      mean)
+
+par(mar = c(4, 4, 2, 2),mfcol = c(2, 1), oma = c(0, 0, 2, 0))
+plot(names(weekendIntervalAverageSteps), weekendIntervalAverageSteps, type = "l", 
+     main = "Weekend", xlab = "", ylab = "Number of Steps", 
+     ylim = range(weekdaysIntervalAverageSteps))
+plot(names(weekdaysIntervalAverageSteps), weekdaysIntervalAverageSteps, 
+     type = "l", main = "Weekday", xlab = "Interval", ylab = "Number of Steps", 
+     ylim = range(weekdaysIntervalAverageSteps))
+mtext("Average Steps Taken", outer = TRUE, cex = 1.5)
+```
+<p style="margin: 20px 0">We found considerable differences between "weekend" 
+and "weekdays" patters.</p>
